@@ -26,7 +26,7 @@ def resize_youtube_thumbnail(img: Image.Image) -> Image.Image:
 
     It crops the center of the image after resizing.
     """
-    target_size = 640
+    target_size = 1280
     aspect_ratio = img.width / img.height
 
     if aspect_ratio > 1:
@@ -53,7 +53,7 @@ def resize_jiosaavn_thumbnail(img: Image.Image) -> Image.Image:
 
     It upscales the image while preserving quality.
     """
-    target_size = 600
+    target_size = 1280
     img = img.resize((target_size, target_size), Image.Resampling.LANCZOS)
     return img
 
