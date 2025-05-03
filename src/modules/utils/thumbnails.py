@@ -71,7 +71,7 @@ def clean_text(text: str, limit: int = 17) -> str:
 def add_controls(img: Image.Image) -> Image.Image:
     """Adds blurred background effect and overlay controls."""
     img = img.filter(ImageFilter.GaussianBlur(25))
-    box = (120, 120, 520, 480)
+    box = (120, 120, 660, 440)
 
     region = img.crop(box)
     controls = Image.open("src/modules/utils/controls.png").convert("RGBA")
