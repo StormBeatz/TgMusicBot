@@ -100,19 +100,15 @@ async def fetch_image(url: str) -> Image.Image | None:
                 "https://i1.sndcdn"
             ):
                 img = resize_jiosaavn_thumbnail(img)
-            else:
-                # Handle other image sources in 16:9 format
-                img = resize_youtube_thumbnail(img)
             return img
         except Exception as e:
             LOGGER.error("Image loading error: %s", e)
             return None
 
 
-def clean_text(text: str, limit: int = 25) -> str:
+def clean_text(text: str, limit: int = 17) -> str:
     """
     Sanitizes and truncates text to fit within the limit.
-    Increased limit for 16:9 layout which has more horizontal space.
     """
     text = text.strip()
     return f"{text[:limit - 3]}..." if len(text) > limit else text
@@ -123,7 +119,7 @@ def add_controls(img: Image.Image) -> Image.Image:
     Adds blurred background effect and overlay controls.
     """
     img = img.filter(ImageFilter.GaussianBlur(25))
-    box = (120, 120, 520, 480)
+    box = (120, 120, 660, 440)
 
     region = img.crop(box)
     controls = Image.open("src/modules/utils/controls.png").convert("RGBA")
@@ -142,7 +138,7 @@ def add_controls(img: Image.Image) -> Image.Image:
 
 def make_sq(image: Image.Image, size: int = 125) -> Image.Image:
     """
-    Crops an image into a rounded square for album art.
+    Crops an image into a rounded square.
     """
     width, height = image.size
     side_length = min(width, height)
@@ -181,7 +177,7 @@ def get_duration(duration: int, time: str = "0:24") -> str:
 
 async def gen_thumb(song: CachedTrack) -> str:
     """
-    Generates and saves a 16:9 thumbnail for the song.
+    Generates and saves a thumbnail for the song.
     """
     save_dir = f"database/photos/{song.track_id}.png"
     if await aiopath.exists(save_dir):
@@ -194,35 +190,19 @@ async def gen_thumb(song: CachedTrack) -> str:
     if not thumb:
         return ""
 
-    # Create a new 16:9 image (1280x720)
-    bg = Image.new("RGBA", (1280, 720), (0, 0, 0, 255))
-    
-    # Process the thumbnail
-    if thumb:
-        # Resize to 16:9 if needed
-        thumb_width, thumb_height = thumb.size
-        if thumb_width / thumb_height != 16/9:
-            thumb = resize_youtube_thumbnail(thumb)
-            
-        # Apply blur and controls
-        bg = add_controls(thumb)
-        
-        # Create album art thumbnail
-        album_art = make_sq(thumb, size=175)  # Slightly larger album art for 16:9
-        
-        # Position album art on the left side
-        paste_x, paste_y = 145, 155  # Adjusted for 16:9
-        bg.paste(album_art, (paste_x, paste_y), album_art)
+    # Process Image
+    bg = add_controls(thumb)
+    image = make_sq(thumb)
 
-    # Add text elements
+    # Positions
+    paste_x, paste_y = 145, 155
+    bg.paste(image, (paste_x, paste_y), image)
+
     draw = ImageDraw.Draw(bg)
-    
-    # Adjusted positions for 16:9 layout
-    draw.text((380, 270), "Yumi Music", (192, 192, 192), font=FONTS["nfont"])
-    draw.text((380, 290), title, (255, 255, 255), font=FONTS["tfont"])
-    draw.text((382, 325), artist, (255, 255, 255), font=FONTS["cfont"])
-    draw.text((983, 321), get_duration(duration), (192, 192, 192), font=FONTS["dfont"])
+    draw.text((285, 180), "Yumi Music", (192, 192, 192), font=FONTS["nfont"])
+    draw.text((285, 200), title, (255, 255, 255), font=FONTS["tfont"])
+    draw.text((287, 235), artist, (255, 255, 255), font=FONTS["cfont"])
+    draw.text((478, 321), get_duration(duration), (192, 192, 192), font=FONTS["dfont"])
 
-    # Save the image
     await asyncio.to_thread(bg.save, save_dir)
     return save_dir if await aiopath.exists(save_dir) else ""
