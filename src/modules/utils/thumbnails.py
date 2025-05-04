@@ -1,7 +1,3 @@
-#  Copyright (c) 2025 AshokShau
-#  Licensed under the GNU AGPL v3.0: https://www.gnu.org/licenses/agpl-3.0.html
-#  Part of the TgMusicBot project. All rights reserved where applicable.
-
 import asyncio
 from io import BytesIO
 
@@ -22,39 +18,57 @@ FONTS = {
 
 def resize_youtube_thumbnail(img: Image.Image) -> Image.Image:
     """
-    Resize a YouTube thumbnail to 640x640 while keeping important content.
-
-    It crops the center of the image after resizing.
+    Resize a YouTube thumbnail to 16:9 aspect ratio while keeping important content.
+    
+    Target resolution is 1280x720 (HD).
     """
-    target_size = 640
+    target_width = 1280
+    target_height = 720
     aspect_ratio = img.width / img.height
 
-    if aspect_ratio > 1:
-        new_width = int(target_size * aspect_ratio)
-        new_height = target_size
+    if aspect_ratio > (16/9):
+        # Image is wider than 16:9
+        new_width = int(target_height * aspect_ratio)
+        new_height = target_height
     else:
-        new_width = target_size
-        new_height = int(target_size / aspect_ratio)
+        # Image is taller than 16:9
+        new_width = target_width
+        new_height = int(target_width / aspect_ratio)
 
     img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
-    # Crop to 640x640 (center crop)
-    left = (img.width - target_size) // 2
-    top = (img.height - target_size) // 2
-    right = left + target_size
-    bottom = top + target_size
+    # Crop to 1280x720 (center crop)
+    left = (img.width - target_width) // 2
+    top = (img.height - target_height) // 2
+    right = left + target_width
+    bottom = top + target_height
 
     return img.crop((left, top, right, bottom))
 
 
 def resize_jiosaavn_thumbnail(img: Image.Image) -> Image.Image:
     """
-    Resize a JioSaavn thumbnail from 500x500 to 600x600.
-
-    It upscales the image while preserving quality.
+    Resize a JioSaavn thumbnail to 16:9 aspect ratio.
+    
+    Target resolution is 1280x720 (HD).
     """
-    target_size = 600
-    img = img.resize((target_size, target_size), Image.Resampling.LANCZOS)
+    target_width = 1280
+    target_height = 720
+    
+    # Resize the image to fill the target height
+    new_width = int(target_height * (img.width / img.height))
+    img = img.resize((new_width, target_height), Image.Resampling.LANCZOS)
+    
+    # If the resized image is wider than target_width, crop the sides
+    if new_width > target_width:
+        left = (new_width - target_width) // 2
+        img = img.crop((left, 0, left + target_width, target_height))
+    else:
+        # If it's narrower, create a black background and center the image
+        background = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 255))
+        background.paste(img, ((target_width - new_width) // 2, 0), img.convert("RGBA"))
+        img = background
+        
     return img
 
 
@@ -86,15 +100,19 @@ async def fetch_image(url: str) -> Image.Image | None:
                 "https://i1.sndcdn"
             ):
                 img = resize_jiosaavn_thumbnail(img)
+            else:
+                # Handle other image sources in 16:9 format
+                img = resize_youtube_thumbnail(img)
             return img
         except Exception as e:
             LOGGER.error("Image loading error: %s", e)
             return None
 
 
-def clean_text(text: str, limit: int = 17) -> str:
+def clean_text(text: str, limit: int = 25) -> str:
     """
     Sanitizes and truncates text to fit within the limit.
+    Increased limit for 16:9 layout which has more horizontal space.
     """
     text = text.strip()
     return f"{text[:limit - 3]}..." if len(text) > limit else text
@@ -102,29 +120,36 @@ def clean_text(text: str, limit: int = 17) -> str:
 
 def add_controls(img: Image.Image) -> Image.Image:
     """
-    Adds blurred background effect and overlay controls.
+    Adds blurred background effect and overlay controls for 16:9 layout.
     """
     img = img.filter(ImageFilter.GaussianBlur(25))
-    box = (120, 120, 520, 480)
+    
+    # For 16:9 aspect ratio (1280x720)
+    box = (120, 120, 1160, 600)  # Adjusted for widescreen format
 
     region = img.crop(box)
     controls = Image.open("src/modules/utils/controls.png").convert("RGBA")
+    
+    # Darken the region
     dark_region = ImageEnhance.Brightness(region).enhance(0.5)
 
+    # Create rounded mask
     mask = Image.new("L", dark_region.size, 0)
     ImageDraw.Draw(mask).rounded_rectangle(
         (0, 0, box[2] - box[0], box[3] - box[1]), 40, fill=255
     )
 
     img.paste(dark_region, box, mask)
-    img.paste(controls, (135, 305), controls)
+    
+    # Position controls more to the right for widescreen layout
+    img.paste(controls, (640, 305), controls)
 
     return img
 
 
 def make_sq(image: Image.Image, size: int = 125) -> Image.Image:
     """
-    Crops an image into a rounded square.
+    Crops an image into a rounded square for album art.
     """
     width, height = image.size
     side_length = min(width, height)
@@ -163,7 +188,7 @@ def get_duration(duration: int, time: str = "0:24") -> str:
 
 async def gen_thumb(song: CachedTrack) -> str:
     """
-    Generates and saves a thumbnail for the song.
+    Generates and saves a 16:9 thumbnail for the song.
     """
     save_dir = f"database/photos/{song.track_id}.png"
     if await aiopath.exists(save_dir):
@@ -176,19 +201,35 @@ async def gen_thumb(song: CachedTrack) -> str:
     if not thumb:
         return ""
 
-    # Process Image
-    bg = add_controls(thumb)
-    image = make_sq(thumb)
+    # Create a new 16:9 image (1280x720)
+    bg = Image.new("RGBA", (1280, 720), (0, 0, 0, 255))
+    
+    # Process the thumbnail
+    if thumb:
+        # Resize to 16:9 if needed
+        thumb_width, thumb_height = thumb.size
+        if thumb_width / thumb_height != 16/9:
+            thumb = resize_youtube_thumbnail(thumb)
+            
+        # Apply blur and controls
+        bg = add_controls(thumb)
+        
+        # Create album art thumbnail
+        album_art = make_sq(thumb, size=175)  # Slightly larger album art for 16:9
+        
+        # Position album art on the left side
+        paste_x, paste_y = 180, 245  # Adjusted for 16:9
+        bg.paste(album_art, (paste_x, paste_y), album_art)
 
-    # Positions
-    paste_x, paste_y = 145, 155
-    bg.paste(image, (paste_x, paste_y), image)
-
+    # Add text elements
     draw = ImageDraw.Draw(bg)
-    draw.text((285, 180), "Fallen Beatz", (192, 192, 192), font=FONTS["nfont"])
-    draw.text((285, 200), title, (255, 255, 255), font=FONTS["tfont"])
-    draw.text((287, 235), artist, (255, 255, 255), font=FONTS["cfont"])
-    draw.text((478, 321), get_duration(duration), (192, 192, 192), font=FONTS["dfont"])
+    
+    # Adjusted positions for 16:9 layout
+    draw.text((380, 270), "Yumi Music", (192, 192, 192), font=FONTS["nfont"])
+    draw.text((380, 290), title, (255, 255, 255), font=FONTS["tfont"])
+    draw.text((382, 325), artist, (255, 255, 255), font=FONTS["cfont"])
+    draw.text((983, 321), get_duration(duration), (192, 192, 192), font=FONTS["dfont"])
 
+    # Save the image
     await asyncio.to_thread(bg.save, save_dir)
     return save_dir if await aiopath.exists(save_dir) else ""
