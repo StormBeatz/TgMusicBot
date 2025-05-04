@@ -195,7 +195,7 @@ async def gen_thumb(song: CachedTrack) -> str:
     image = make_sq(thumb)
 
     # Positions
-    paste_x, paste_y = 145, 155
+    paste_x, paste_y = 185, 175
     bg.paste(image, (paste_x, paste_y), image)
 
     draw = ImageDraw.Draw(bg)
