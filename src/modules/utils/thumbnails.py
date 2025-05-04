@@ -120,29 +120,22 @@ def clean_text(text: str, limit: int = 25) -> str:
 
 def add_controls(img: Image.Image) -> Image.Image:
     """
-    Adds blurred background effect and overlay controls for 16:9 layout.
+    Adds blurred background effect and overlay controls.
     """
     img = img.filter(ImageFilter.GaussianBlur(25))
-    
-    # For 16:9 aspect ratio (1280x720)
-    box = (120, 120, 660, 440)  # Adjusted for widescreen format
+    box = (120, 120, 520, 480)
 
     region = img.crop(box)
     controls = Image.open("src/modules/utils/controls.png").convert("RGBA")
-    
-    # Darken the region
     dark_region = ImageEnhance.Brightness(region).enhance(0.5)
 
-    # Create rounded mask
     mask = Image.new("L", dark_region.size, 0)
     ImageDraw.Draw(mask).rounded_rectangle(
         (0, 0, box[2] - box[0], box[3] - box[1]), 40, fill=255
     )
 
     img.paste(dark_region, box, mask)
-    
-    # Position controls more to the right for widescreen layout
-    img.paste(controls, (135, 505), controls)
+    img.paste(controls, (135, 305), controls)
 
     return img
 
