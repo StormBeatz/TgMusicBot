@@ -142,7 +142,7 @@ def add_controls(img: Image.Image) -> Image.Image:
     img.paste(dark_region, box, mask)
     
     # Position controls more to the right for widescreen layout
-    img.paste(controls, (640, 305), controls)
+    img.paste(controls, (135, 505), controls)
 
     return img
 
@@ -218,7 +218,7 @@ async def gen_thumb(song: CachedTrack) -> str:
         album_art = make_sq(thumb, size=175)  # Slightly larger album art for 16:9
         
         # Position album art on the left side
-        paste_x, paste_y = 180, 245  # Adjusted for 16:9
+        paste_x, paste_y = 145, 155  # Adjusted for 16:9
         bg.paste(album_art, (paste_x, paste_y), album_art)
 
     # Add text elements
