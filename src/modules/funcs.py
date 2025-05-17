@@ -7,17 +7,14 @@ from typing import Union
 
 from pytdbot import Client, types
 
-from src.helpers import MusicServiceWrapper, call, db, get_string
+from src.helpers import call, db, get_string
 from src.helpers import chat_cache
-from src.logger import LOGGER
-from src.modules.play import _get_platform_url, play_music
-from src.modules.progress_handler import _handle_play_c_data
-from src.modules.utils import Filter, PauseButton, ResumeButton, sec_to_min
+from src.modules.utils import Filter, sec_to_min
 from src.modules.utils.admins import is_admin
-from src.modules.utils.play_helpers import del_msg, edit_text, extract_argument
+from src.modules.utils.play_helpers import del_msg, extract_argument
 
 
-async def is_admin_or_reply(msg: types.Message) -> Union[int, types.Message]:
+async def is_admin_or_reply(msg: types.Message) -> Union[int, types.Message, types.Error]:
     """
     Check if user is admin and if a song is playing.
     """
@@ -33,12 +30,16 @@ async def is_admin_or_reply(msg: types.Message) -> Union[int, types.Message]:
 
 
 async def handle_playback_action(
-    _: Client, msg: types.Message, action, success_msg: str, fail_msg: str
+    c: Client, msg: types.Message, action, success_msg: str, fail_msg: str
 ) -> None:
     """
     Handle playback actions like stop, pause, resume, mute, unmute.
     """
     chat_id = await is_admin_or_reply(msg)
+    if isinstance(chat_id, types.Error):
+        c.logger.warning(f"Error sending reply: {chat_id}")
+        return
+
     if isinstance(chat_id, types.Message):
         return
     lang = await db.get_lang(chat_id)
@@ -356,11 +357,15 @@ async def clear_queue(c: Client, msg: types.Message) -> None:
 
 
 @Client.on_message(filters=Filter.command(["stop", "end"]))
-async def stop_song(_: Client, msg: types.Message) -> None:
+async def stop_song(c: Client, msg: types.Message) -> None:
     """
     Stop the current song.
     """
     chat_id = await is_admin_or_reply(msg)
+    if isinstance(chat_id, types.Error):
+        c.logger.warning(f"Error sending reply: {chat_id}")
+        return None
+
     if isinstance(chat_id, types.Message):
         return
 
@@ -380,11 +385,11 @@ async def stop_song(_: Client, msg: types.Message) -> None:
 
 
 @Client.on_message(filters=Filter.command("pause"))
-async def pause_song(_: Client, msg: types.Message) -> None:
+async def pause_song(c: Client, msg: types.Message) -> None:
     """Pause the current song."""
     lang = await db.get_lang(msg.chat_id)
     await handle_playback_action(
-        _,
+        c,
         msg,
         call.pause,
         get_string("stream_paused", lang),
@@ -393,11 +398,11 @@ async def pause_song(_: Client, msg: types.Message) -> None:
 
 
 @Client.on_message(filters=Filter.command("resume"))
-async def resume(_: Client, msg: types.Message) -> None:
+async def resume(c: Client, msg: types.Message) -> None:
     """Resume the current song."""
     lang = await db.get_lang(msg.chat_id)
     await handle_playback_action(
-        _,
+        c,
         msg,
         call.resume,
         get_string("stream_resumed", lang),
@@ -406,11 +411,11 @@ async def resume(_: Client, msg: types.Message) -> None:
 
 
 @Client.on_message(filters=Filter.command("mute"))
-async def mute_song(_: Client, msg: types.Message) -> None:
+async def mute_song(c: Client, msg: types.Message) -> None:
     """Mute the current song."""
     lang = await db.get_lang(msg.chat_id)
     await handle_playback_action(
-        _,
+        c,
         msg,
         call.mute,
         get_string("stream_muted", lang),
@@ -419,11 +424,11 @@ async def mute_song(_: Client, msg: types.Message) -> None:
 
 
 @Client.on_message(filters=Filter.command("unmute"))
-async def unmute_song(_: Client, msg: types.Message) -> None:
+async def unmute_song(c: Client, msg: types.Message) -> None:
     """Unmute the current song."""
     lang = await db.get_lang(msg.chat_id)
     await handle_playback_action(
-        _,
+        c,
         msg,
         call.unmute,
         get_string("stream_unmuted", lang),
@@ -432,11 +437,15 @@ async def unmute_song(_: Client, msg: types.Message) -> None:
 
 
 @Client.on_message(filters=Filter.command("volume"))
-async def volume(_: Client, msg: types.Message) -> None:
+async def volume(c: Client, msg: types.Message) -> None:
     """
     Change the volume of the current song.
     """
     chat_id = await is_admin_or_reply(msg)
+    if isinstance(chat_id, types.Error):
+        c.logger.warning(f"Error sending reply: {chat_id}")
+        return None
+
     if isinstance(chat_id, types.Message):
         return None
 
@@ -477,6 +486,10 @@ async def skip_song(c: Client, msg: types.Message) -> None:
     Skip the current song.
     """
     chat_id = await is_admin_or_reply(msg)
+    if isinstance(chat_id, types.Error):
+        c.logger.warning(f"Error sending reply: {chat_id}")
+        return None
+
     if isinstance(chat_id, types.Message):
         return None
 
@@ -499,170 +512,3 @@ async def skip_song(c: Client, msg: types.Message) -> None:
     return None
 
 
-@Client.on_updateNewCallbackQuery(filters=Filter.regex(r"play_\w+"))
-async def callback_query(c: Client, message: types.UpdateNewCallbackQuery) -> None:
-    """Handle all play control callback queries (skip, stop, pause, resume, timer)."""
-    chat_id = message.chat_id
-    lang = await db.get_lang(chat_id)
-    try:
-        data = message.payload.data.decode()
-        user_id = message.sender_user_id
-        get_msg = await message.getMessage()
-        if isinstance(get_msg, types.Error):
-            LOGGER.warning("Error getting message: %s", get_msg.message)
-            return None
-
-        user = await c.getUser(user_id)
-        if isinstance(user, types.Error):
-            LOGGER.warning("Error getting user: %s", user.message)
-            return None
-        user_name = user.first_name
-
-        async def send_response(
-            msg: str, alert: bool = False, delete: bool = False, markup=None
-        ) -> None:
-            """
-            Helper function to send responses consistently.
-            """
-            if alert:
-                await message.answer(msg, show_alert=True)
-            else:
-                if get_msg.caption:
-                    await message.edit_message_caption(caption=msg, reply_markup=markup)
-                else:
-                    await message.edit_message_text(text=msg, reply_markup=markup)
-            if delete:
-                _del = await c.deleteMessages(
-                    chat_id, [message.message_id], revoke=True
-                )
-                if isinstance(_del, types.Error):
-                    LOGGER.warning("Error deleting message: %s", _del.message)
-
-        # Check admin permissions for control actions
-        def requires_admin(cb_data: str) -> bool:
-            """
-            Check if the action requires admin privileges.
-            """
-            return cb_data in {
-                "play_skip",
-                "play_stop",
-                "play_pause",
-                "play_resume",
-                "play_close",
-            }
-
-        if requires_admin(data) and not await is_admin(chat_id, user_id):
-            await message.answer(
-                f"⚠️ {get_string('admin_required', lang)}", show_alert=True
-            )
-            return None
-
-        # Check if chat is active for control actions
-        def requires_active_chat(cb_data: str) -> bool:
-            """
-            Check if the action requires an active chat session.
-            """
-            return cb_data in {
-                "play_skip",
-                "play_stop",
-                "play_pause",
-                "play_resume",
-                "play_timer",
-            }
-
-        if requires_active_chat(data) and not chat_cache.is_active(chat_id):
-            return await send_response(
-                f"❌ {get_string('no_active_chat', lang)}", alert=True
-            )
-
-        if data == "play_skip":
-            done = await call.play_next(chat_id)
-            if isinstance(done, types.Error):
-                await send_response(
-                    f"⚠️ {get_string('error_occurred', lang)}\n\n{done.message}",
-                    alert=True,
-                )
-                return None
-            await send_response(get_string("song_skipped", lang), delete=True)
-            return None
-        elif data == "play_stop":
-            done = await call.end(chat_id)
-            if isinstance(done, types.Error):
-                await send_response(done.message, alert=True)
-                return None
-            await send_response(
-                f"<b>➻ {get_string('stream_stopped', lang)}:</b>\n└ {get_string('requested_by', lang)}: {user_name}"
-            )
-            return None
-        elif data == "play_pause":
-            done = await call.pause(chat_id)
-            if isinstance(done, types.Error):
-                await send_response(
-                    f"⚠️ {get_string('error_occurred', lang)}\n\n{done.message}",
-                    alert=True,
-                )
-                return None
-            await send_response(
-                f"<b>➻ {get_string('stream_paused', lang)}:</b>\n└ {get_string('requested_by', lang)}: {user_name}",
-                markup=(PauseButton if await db.get_buttons_status(chat_id) else None),
-            )
-            return None
-        elif data == "play_resume":
-            done = await call.resume(chat_id)
-            if isinstance(done, types.Error):
-                await send_response(f"{done.message}", alert=True)
-                return None
-            await send_response(
-                f"<b>➻ {get_string('stream_resumed', lang)}:</b>\n└ {get_string('requested_by', lang)}: {user_name}",
-                markup=(ResumeButton if await db.get_buttons_status(chat_id) else None),
-            )
-            return None
-        elif data == "play_close":
-            _delete = await c.deleteMessages(chat_id, [message.message_id], revoke=True)
-            if isinstance(_delete, types.Error):
-                await message.answer(
-                    f"Failed to close {_delete.message}", show_alert=True
-                )
-                return None
-            await message.answer(get_string("closed", lang), show_alert=True)
-            return None
-        elif data.startswith("play_c_"):
-            await _handle_play_c_data(data, message, chat_id, user_id, user_name, c)
-            return None
-        else:
-            try:
-                _, platform, song_id = data.split("_", 2)
-            except ValueError:
-                LOGGER.error(f"Invalid callback data format: {data}")
-                await send_response(
-                    get_string("invalid_request_format", lang), alert=True
-                )
-                return None
-
-            await message.answer(
-                text=f"{get_string('playing_song', lang)} {user_name}", show_alert=True
-            )
-            reply_message = await message.edit_message_text(
-                f"🎶 {get_string('searching', lang)} ...\n{get_string('requested_by', lang)}: {user_name} 🥀"
-            )
-            if isinstance(reply_message, types.Error):
-                c.logger.warning(f"Error sending reply: {reply_message}")
-                return None
-
-            url = _get_platform_url(platform, song_id)
-            if not url:
-                LOGGER.error(f"Invalid platform: {platform}; data: {data}")
-                await edit_text(
-                    reply_message,
-                    text=f"⚠️ {get_string('invalid_platform', lang)} {platform}",
-                )
-                return None
-
-            if song := await MusicServiceWrapper(url).get_info():
-                return await play_music(c, reply_message, song, user_name)
-            await edit_text(reply_message, text=get_string("song_not_found", lang))
-            return None
-    except Exception as e:
-        c.logger.critical(f"Unhandled exception in callback_query: {e}")
-        await message.answer(f"⚠️ {get_string('error_occurred', lang)}", show_alert=True)
-        return None
