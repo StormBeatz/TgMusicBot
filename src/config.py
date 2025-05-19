@@ -77,3 +77,6 @@ devs_env: Optional[str] = getenv("DEVS")
 DEVS: list[int] = list(map(int, devs_env.split())) if devs_env else []
 if OWNER_ID and OWNER_ID not in DEVS:
     DEVS.append(OWNER_ID)
+
+PING_IMG_URL: Optional[str] = getenv("PING_IMG_URL", "https://graph.org//file/389a372e8ae039320ca6c.png")
+START_IMG_URL: Optional[str] = getenv("START_IMG_URL", "https://graph.org/file/69779866559650b920ac4-b652cf5ec54f3c6937.jpg")
