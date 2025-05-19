@@ -4,24 +4,32 @@
 
 
 PmStartText = """
-Hey {0}, 🥀
+Heyy {0} ~
 
-Welcome to <b>{1}</b>!
-Version: <b>v{2}</b>
+🎧 Welcome, music lovers! Let the beats begin! 🕊️
+🌟 Powered By :- @GrayBots !!
+──────────────────
+🤖 Introduction :
 
-A fast, reliable and powerful Telegram music bot built with amazing features.
+🚀 I’m your music companion — built for dreamers, wired for audiophiles.
+From late-night lo-fi to battle-ready anime beats — just say play.
+──────────────────
+🌟 Supported Platforms :
 
-<b>Supported Platforms:</b> YouTube, Spotify, Apple Music and SoundCloud.
+Right now, I groove with YouTube and Spotify — more coming soon!
+──────────────────
+💡Need help using the music bot? Click the buttons below for guidance.👇🏻
 """
 
 StartText = """
-<b>Hello {0}, 🥀</b>
+Hey {0},
+This is {1}
 
-<b>{1}</b> is now active and ready to play music! 🔊
+Thank you for adding me 🙏
 
-───────────────
-Need help or got questions?  
-Join our <a href='{2}'>Support Chat</a> — we're here for you! 💬
+Now {1} can start playing songs in this chat! 🎶🔥
+
+Let the music begin! 🎧🎉
 """
 
 UserCommands = """
@@ -32,7 +40,6 @@ UserCommands = """
 /vplay [song name or reply to video] – Play video in voice chat.
 /privacy – View privacy policy.
 /lang – Change the bot's language.
-
 """
 
 AdminCommands = """
@@ -65,7 +72,6 @@ ChatOwnerCommands = """
 /buttons – Toggle playback buttons display.
 /thumb – Toggle thumbnail display.
 /autoend [on/off] – Automatically ends voice chats when no one is listening.
-/channelplay [off | reply to channel message] – Connect Group to a channel.
 """
 
 BotDevsCommands = """
