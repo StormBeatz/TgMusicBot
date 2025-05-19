@@ -195,7 +195,6 @@ class InactiveCallManager:
         Returns:
             None
         """
-        self.scheduler.add_job(self.end_inactive_calls, "interval", seconds=50)
         self.scheduler.add_job(self.leave_all, CronTrigger(hour=0, minute=0))
         self.scheduler.start()
         self.bot.logger.info("Scheduler started.")
