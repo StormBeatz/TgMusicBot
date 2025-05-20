@@ -79,4 +79,4 @@ if OWNER_ID and OWNER_ID not in DEVS:
     DEVS.append(OWNER_ID)
 
 PING_IMG_URL: Optional[str] = getenv("PING_IMG_URL", "https://graph.org//file/389a372e8ae039320ca6c.png")
-START_IMG_URL: Optional[str] = getenv("START_IMG_URL", "https://graph.org/file/5f4cb9a0ccc468983039b-628d831be8e8091c42.jpg")
+START_IMG_URL: Optional[str] = getenv("START_IMG_URL", "https://graph.org/file/8c5f060dea1bcd933b58a-f86738ad591e8e6d1d.jpg")
