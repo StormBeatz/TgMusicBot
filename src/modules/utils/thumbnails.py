@@ -125,7 +125,7 @@ async def gen_thumb(song: CachedTrack) -> str:
 
         # Text and play controls
         draw = ImageDraw.Draw(blurred_bg)
-        draw.text((230, 120), "Samira Vibez", fill=(200, 200, 200), font=FONTS["nfont"])
+        draw.text((230, 120), "Akshi Vibez", fill=(200, 200, 200), font=FONTS["nfont"])
         draw.text((230, 140), title[:30], fill=(255, 255, 255), font=FONTS["tfont"])
         draw.text((230, 175), artist[:30], fill=(255, 255, 255), font=FONTS["cfont"])
         draw_play_controls(draw, (230, 205), format_duration(duration_sec))
