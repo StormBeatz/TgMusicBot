@@ -74,23 +74,12 @@ def draw_play_controls(draw: ImageDraw.Draw, position: tuple[int, int], duration
     draw.text((text_x, text_y), duration_text, font=FONTS["dfont"], fill=(220, 220, 220))
 
 
-def make_sq(image: Image.Image, size: int = 125) -> Image.Image:
-    width, height = image.size
-    side = min(width, height)
-    crop = image.crop((
-        (width - side) // 2,
-        (height - side) // 2,
-        (width + side) // 2,
-        (height + side) // 2
-    ))
-    resize = crop.resize((size, size), Image.Resampling.LANCZOS)
-
-    mask = Image.new("L", (size, size), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, size, size), radius=30, fill=255)
-
-    rounded = ImageOps.fit(resize, (size, size))
-    rounded.putalpha(mask)
-    return rounded
+def make_rect(image: Image.Image, size: tuple[int, int] = (200, 112)) -> Image.Image:
+    image = image.resize(size, Image.Resampling.LANCZOS)
+    mask = Image.new("L", size, 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, *size), radius=20, fill=255)
+    image.putalpha(mask)
+    return image
 
 
 async def gen_thumb(song: CachedTrack) -> str:
@@ -120,8 +109,8 @@ async def gen_thumb(song: CachedTrack) -> str:
         blurred_bg.paste(dark_region, content_box, mask)
 
         # Album art (non-blurred)
-        cover = make_sq(original)
-        blurred_bg.paste(cover, (90, 110), cover)
+        cover = make_rect(original)
+        blurred_bg.paste(cover, (90, 120), cover)
 
         # Text and play controls
         draw = ImageDraw.Draw(blurred_bg)
