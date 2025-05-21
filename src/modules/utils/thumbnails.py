@@ -29,7 +29,7 @@ async def fetch_image(url: str) -> Image.Image | None:
             if url.startswith("https://i.ytimg.com"):
                 img = img.resize((640, 360), Image.Resampling.LANCZOS)
             elif url.startswith("http://c.saavncdn.com") or url.startswith("https://i1.sndcdn"):
-                img = img.resize((600, 360), Image.Resampling.LANCZOS)
+                img = img.resize((640, 360), Image.Resampling.LANCZOS)
 
             return img
         except Exception as e:
