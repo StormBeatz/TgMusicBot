@@ -1,10 +1,5 @@
-#  Copyright (c) 2025 AshokShau
-#  Licensed under the GNU AGPL v3.0: https://www.gnu.org/licenses/agpl-3.0.html
-#  Part of the TgMusicBot project. All rights reserved where applicable.
-
 import asyncio
 from io import BytesIO
-
 import httpx
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
 from aiofiles.os import path as aiopath
@@ -20,58 +15,9 @@ FONTS = {
 }
 
 
-def resize_youtube_thumbnail(img: Image.Image) -> Image.Image:
-    """
-    Resize a YouTube thumbnail to 640x360 while keeping important content.
-    It crops the center of the image after resizing.
-    """
-    target_width, target_height = 640, 360
-    aspect_ratio = img.width / img.height
-
-    if aspect_ratio > (target_width / target_height):
-        new_height = target_height
-        new_width = int(new_height * aspect_ratio)
-    else:
-        new_width = target_width
-        new_height = int(new_width / aspect_ratio)
-
-    img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
-    # Center crop to 640x360
-    left = (img.width - target_width) // 2
-    top = (img.height - target_height) // 2
-    right = left + target_width
-    bottom = top + target_height
-
-    return img.crop((left, top, right, bottom))
-
-
-def resize_jiosaavn_thumbnail(img: Image.Image) -> Image.Image:
-    """
-    Resize a JioSaavn thumbnail from 500x500 to 600x600.
-
-    It upscales the image while preserving quality.
-    """
-    target_size = 600
-    img = img.resize((target_size, target_size), Image.Resampling.LANCZOS)
-    return img
-
-
 async def fetch_image(url: str) -> Image.Image | None:
-    """
-    Fetches an image from the given URL, resizes it if necessary for JioSaavn and
-    YouTube thumbnails, and returns the loaded image as a PIL Image object, or None on
-    failure.
-
-    Args:
-        url (str): URL of the image to fetch.
-
-    Returns:
-        Image.Image | None: The fetched and possibly resized image, or None if the fetch fails.
-    """
     if not url:
         return None
-
     async with httpx.AsyncClient() as client:
         try:
             if url.startswith("https://is1-ssl.mzstatic.com"):
@@ -79,59 +25,64 @@ async def fetch_image(url: str) -> Image.Image | None:
             response = await client.get(url, timeout=5)
             response.raise_for_status()
             img = Image.open(BytesIO(response.content)).convert("RGBA")
+
             if url.startswith("https://i.ytimg.com"):
-                img = resize_youtube_thumbnail(img)
-            elif url.startswith("http://c.saavncdn.com") or url.startswith(
-                "https://i1.sndcdn"
-            ):
-                img = resize_jiosaavn_thumbnail(img)
+                img = img.resize((640, 360), Image.Resampling.LANCZOS)
+            elif url.startswith("http://c.saavncdn.com") or url.startswith("https://i1.sndcdn"):
+                img = img.resize((600, 360), Image.Resampling.LANCZOS)
+
             return img
         except Exception as e:
             LOGGER.error("Image loading error: %s", e)
             return None
 
 
-def clean_text(text: str, limit: int = 17) -> str:
-    """
-    Sanitizes and truncates text to fit within the limit.
-    """
-    text = text.strip()
-    return f"{text[:limit - 3]}..." if len(text) > limit else text
+def format_duration(seconds: int) -> str:
+    m, s = divmod(seconds, 60)
+    return f"{m}:{s:02d}"
 
 
-def add_controls(img: Image.Image) -> Image.Image:
-    """
-    Adds blurred background effect only.
-    """
-    img = img.filter(ImageFilter.GaussianBlur(25))
-    box = (60, 60, 580, 300)
+def draw_play_controls(draw: ImageDraw.Draw, position: tuple[int, int], duration: str):
+    x, y = position
+    circle_radius = 10  # Smaller play button
+    center_x = x + circle_radius
+    center_y = y + circle_radius
 
-    region = img.crop(box)
-    dark_region = ImageEnhance.Brightness(region).enhance(0.5)
-
-    mask = Image.new("L", dark_region.size, 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, box[2] - box[0], box[3] - box[1]), 30, fill=255
+    # Draw smaller circular play button
+    draw.ellipse(
+        (x, y, x + 2 * circle_radius, y + 2 * circle_radius),
+        fill=(255, 255, 255, 220)
     )
 
-    img.paste(dark_region, box, mask)
-    return img
+    # Smaller triangle play icon in center
+    triangle = [
+        (center_x - 4, center_y - 5),
+        (center_x - 4, center_y + 5),
+        (center_x + 5, center_y),
+    ]
+    draw.polygon(triangle, fill=(0, 0, 0, 255))
+
+    # Text: 00:00 / duration
+    duration_text = f"00:00 / {duration}"
+    bbox = draw.textbbox((0, 0), duration_text, font=FONTS["dfont"])
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
+
+    # Draw text right next to triangle
+    text_x = center_x + 20  # Less spacing
+    text_y = center_y - text_height // 2
+    draw.text((text_x, text_y), duration_text, font=FONTS["dfont"], fill=(220, 220, 220))
 
 
 def make_sq(image: Image.Image, size: int = 125) -> Image.Image:
-    """
-    Crops an image into a rounded square.
-    """
     width, height = image.size
-    side_length = min(width, height)
-    crop = image.crop(
-        (
-            (width - side_length) // 2,
-            (height - side_length) // 2,
-            (width + side_length) // 2,
-            (height + side_length) // 2,
-        )
-    )
+    side = min(width, height)
+    crop = image.crop((
+        (width - side) // 2,
+        (height - side) // 2,
+        (width + side) // 2,
+        (height + side) // 2
+    ))
     resize = crop.resize((size, size), Image.Resampling.LANCZOS)
 
     mask = Image.new("L", (size, size), 0)
@@ -142,51 +93,46 @@ def make_sq(image: Image.Image, size: int = 125) -> Image.Image:
     return rounded
 
 
-def get_duration(duration: int, time: str = "0:24") -> str:
-    """
-    Calculates remaining duration.
-    """
-    try:
-        m1, s1 = divmod(duration, 60)
-        m2, s2 = map(int, time.split(":"))
-        sec = (m1 * 60 + s1) - (m2 * 60 + s2)
-        _min, sec = divmod(sec, 60)
-        return f"{_min}:{sec:02d}"
-    except Exception as e:
-        LOGGER.error("Duration calculation error: %s", e)
-        return "0:00"
-
-
 async def gen_thumb(song: CachedTrack) -> str:
     save_dir = f"database/photos/{song.track_id}.png"
     if await aiopath.exists(save_dir):
         return save_dir
 
-    title, artist = clean_text(song.name), clean_text(song.artist or "Spotify")
-    duration = song.duration or 0
+    try:
+        title = song.name.strip()
+        artist = (song.artist or "Spotify").strip()
+        duration_sec = song.duration or 0
 
-    thumb = await fetch_image(song.thumbnail)
-    if not thumb:
+        original = await fetch_image(song.thumbnail)
+        if not original:
+            return ""
+
+        # Fully blur the background
+        blurred_bg = original.filter(ImageFilter.GaussianBlur(25)).convert("RGBA")
+        draw = ImageDraw.Draw(blurred_bg)
+
+        # Draw blurred darkened box
+        content_box = (60, 60, 580, 300)
+        dark_region = ImageEnhance.Brightness(blurred_bg.crop(content_box)).enhance(0.5)
+
+        mask = Image.new("L", (content_box[2] - content_box[0], content_box[3] - content_box[1]), 0)
+        ImageDraw.Draw(mask).rounded_rectangle((0, 0, mask.size[0], mask.size[1]), 30, fill=255)
+        blurred_bg.paste(dark_region, content_box, mask)
+
+        # Album art (non-blurred)
+        cover = make_sq(original)
+        blurred_bg.paste(cover, (90, 110), cover)
+
+        # Text and play controls
+        draw = ImageDraw.Draw(blurred_bg)
+        draw.text((230, 120), "Akshi Vibez", fill=(200, 200, 200), font=FONTS["nfont"])
+        draw.text((230, 140), title[:30], fill=(255, 255, 255), font=FONTS["tfont"])
+        draw.text((230, 175), artist[:30], fill=(255, 255, 255), font=FONTS["cfont"])
+        draw_play_controls(draw, (230, 205), format_duration(duration_sec))
+
+        await asyncio.to_thread(blurred_bg.save, save_dir)
+        return save_dir if await aiopath.exists(save_dir) else ""
+
+    except Exception as e:
+        LOGGER.error(f"Thumbnail generation error: {e}")
         return ""
-
-    bg = add_controls(thumb)
-    image = make_sq(thumb)
-
-    # Paste square track image
-    paste_x, paste_y = 90, 110
-    bg.paste(image, (paste_x, paste_y), image)
-
-    draw = ImageDraw.Draw(bg)
-    draw.text((230, 120), "Fallen Beatz", (192, 192, 192), font=FONTS["nfont"])
-    draw.text((230, 140), title, (255, 255, 255), font=FONTS["tfont"])
-    draw.text((230, 175), artist, (255, 255, 255), font=FONTS["cfont"])
-
-    # Controls (below title)
-    controls = Image.open("src/modules/utils/controls.png").convert("RGBA")
-    controls_resized = controls.resize((170, 45), Image.Resampling.LANCZOS)
-    bg.paste(controls_resized, (230, 210), controls_resized)
-
-    draw.text((450, 265), get_duration(duration), (192, 192, 192), font=FONTS["dfont"])
-
-    await asyncio.to_thread(bg.save, save_dir)
-    return save_dir if await aiopath.exists(save_dir) else ""
